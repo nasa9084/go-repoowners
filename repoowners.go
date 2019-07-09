@@ -1,7 +1,6 @@
 package repoowners
 
 import (
-	"fmt"
 	"io"
 	"path/filepath"
 	"sort"
@@ -17,11 +16,17 @@ const (
 	DefaultAliasesFilename = "OWNERS_ALIASES"
 )
 
+// Owners holds Owners configuration for one repository.
 type Owners struct {
-	approvers         map[string][]string
-	reviewers         map[string][]string
-	requiredReviewers map[string][]string
-	options           map[string]options
+	// these are path: UsernameSet mapping
+	approvers         map[string]UsernameSet
+	reviewers         map[string]UsernameSet
+	requiredReviewers map[string]UsernameSet
+	// path: options mapping
+	options map[string]options
+
+	// aliasname: []username mapping
+	aliases map[string]UsernameSet
 
 	memoizedApprovers         memo
 	memoizedReviewers         memo
@@ -32,24 +37,24 @@ type memo struct {
 	sync.Map
 }
 
-func (m *memo) store(path string, list []string) {
-	m.Map.Store(path, list)
+func (m *memo) store(path string, set UsernameSet) {
+	m.Map.Store(path, set)
 }
 
-func (m memo) load(path string) []string {
+func (m memo) load(path string) UsernameSet {
 	val, ok := m.Map.Load(path)
 	if ok {
-		return val.([]string)
+		return val.(UsernameSet)
 	}
 	return nil
 }
 
-func (o Owners) entries(path string, mp map[string][]string, opts map[string]options) []string {
-	ret := []string{}
+func (o Owners) entries(path string, mp map[string]UsernameSet, opts map[string]options) UsernameSet {
+	ret := UsernameSet{}
 	for {
-		pp, ok := mp[path]
+		us, ok := mp[path]
 		if ok {
-			ret = append(ret, pp...)
+			ret = ret.Union(us)
 		}
 		if opts[path].NoInheritance {
 			break
@@ -63,11 +68,23 @@ func (o Owners) entries(path string, mp map[string][]string, opts map[string]opt
 		}
 		path = strings.TrimSuffix(path, "/")
 	}
-	sort.Strings(ret)
+	ret = o.expandAliases(ret)
 	return ret
 }
 
-func (o *Owners) Approvers(path string) []string {
+func (o *Owners) expandAliases(usernames UsernameSet) UsernameSet {
+	usernames = usernames.Union(nil) // make a copy
+	for _, username := range usernames.List() {
+		if expanded, ok := o.aliases[username]; ok {
+			usernames.Delete(username)
+			usernames = usernames.Union(expanded)
+		}
+	}
+	return usernames
+}
+
+// Approvers returns a set of approvers for given file path.
+func (o *Owners) Approvers(path string) UsernameSet {
 	if approvers := o.memoizedApprovers.load(path); approvers != nil {
 		return approvers
 	}
@@ -76,12 +93,14 @@ func (o *Owners) Approvers(path string) []string {
 	return approvers
 }
 
+// IsApprover returns true if given user is an approver for given file path.
 func (o *Owners) IsApprover(user, path string) bool {
 	approvers := o.Approvers(path)
-	return isIn(user, approvers)
+	return approvers.Has(user)
 }
 
-func (o *Owners) Reviewers(path string) []string {
+// Reviewers returns a set of reviewers for given file path.
+func (o *Owners) Reviewers(path string) UsernameSet {
 	if reviewers := o.memoizedReviewers.load(path); reviewers != nil {
 		return reviewers
 	}
@@ -90,12 +109,14 @@ func (o *Owners) Reviewers(path string) []string {
 	return reviewers
 }
 
+// IsReviewer returns true if given user is a reviewer for given file path.
 func (o *Owners) IsReviewer(user, path string) bool {
 	reviewers := o.Reviewers(path)
-	return isIn(user, reviewers)
+	return reviewers.Has(user)
 }
 
-func (o *Owners) RequiredReviewers(path string) []string {
+// RequiredReviewers returns a set of required reviewers for given file path.
+func (o *Owners) RequiredReviewers(path string) UsernameSet {
 	if requiredReviewers := o.memoizedRequiredReviewers.load(path); requiredReviewers != nil {
 		return requiredReviewers
 	}
@@ -104,9 +125,10 @@ func (o *Owners) RequiredReviewers(path string) []string {
 	return requiredReviewers
 }
 
+// IsRequiredReviewer returns true if given user is a required reviewer for given path.
 func (o *Owners) IsRequiredReviewer(user, path string) bool {
 	requiredReviewers := o.RequiredReviewers(path)
-	return isIn(user, requiredReviewers)
+	return requiredReviewers.Has(user)
 }
 
 func isIn(val string, slice []string) bool {
@@ -133,24 +155,8 @@ type aliasesConfig struct {
 	Aliases map[string][]string `yaml:"aliases"`
 }
 
-func (o ownersConfig) repr() string {
-	var buf strings.Builder
-	fmt.Fprint(&buf, "ownersConfig{")
-	fmt.Fprintf(&buf, "\n\tOptions: options{")
-	fmt.Fprintf(&buf, "\n\t\tNoInheritance: %t,", o.Options.NoInheritance)
-	fmt.Fprint(&buf, "\n\t},")
-	fmt.Fprint(&buf, "\n\tApprovers: []string{")
-	for _, approver := range o.Approvers {
-		fmt.Fprintf(&buf, "\n\t\t%s,", strconv.Quote(approver))
-	}
-	fmt.Fprint(&buf, "\n\t},")
-	fmt.Fprint(&buf, "\n\tReviewers: []string{")
-	for _, reviewer := range o.Reviewers {
-		fmt.Fprintf(&buf, "\n\t\t%s,", strconv.Quote(reviewer))
-	}
-	fmt.Fprint(&buf, "\n\t},")
-	fmt.Fprint(&buf, "\n}")
-	return buf.String()
+func (ac aliasesConfig) expand(alias string) []string {
+	return ac.Aliases[alias]
 }
 
 func parseOwners(r io.Reader) (ownersConfig, error) {
@@ -173,4 +179,62 @@ func parseAliases(r io.Reader) (aliasesConfig, error) {
 		return aliasesConfig{}, err
 	}
 	return a, nil
+}
+
+// UsernameSet is a set type for usernames.
+type UsernameSet map[string]struct{}
+
+func newUsernameSet(usernames ...string) UsernameSet {
+	us := UsernameSet{}
+	us.Add(usernames...)
+	return us
+}
+
+func (us UsernameSet) Add(usernames ...string) {
+	for _, username := range usernames {
+		us[username] = struct{}{}
+	}
+}
+
+func (us UsernameSet) Delete(usernames ...string) {
+	for _, username := range usernames {
+		delete(us, username)
+	}
+}
+
+func (us UsernameSet) Union(us2 UsernameSet) UsernameSet {
+	result := UsernameSet{}
+	for k := range us {
+		result.Add(k)
+	}
+	for k := range us2 {
+		result.Add(k)
+	}
+	return result
+}
+
+func (us UsernameSet) Has(username string) bool {
+	_, has := us[username]
+	return has
+}
+
+func (us UsernameSet) List() []string {
+	ret := make([]string, 0, len(us))
+	for k := range us {
+		ret = append(ret, k)
+	}
+	return ret
+}
+
+func (us UsernameSet) String() string {
+	var buf strings.Builder
+	buf.WriteString("{")
+	usernames := us.List()
+	for i := range usernames {
+		usernames[i] = strconv.Quote(usernames[i])
+	}
+	sort.Strings(usernames)
+	buf.WriteString(strings.Join(usernames, ", "))
+	buf.WriteString("}")
+	return buf.String()
 }

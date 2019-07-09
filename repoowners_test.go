@@ -9,27 +9,27 @@ import (
 
 func TestApprovers(t *testing.T) {
 	owners := Owners{
-		approvers: map[string][]string{
-			"foo/bar":     []string{"bob"},
-			"foo/bar/baz": []string{"charlie", "dave"},
-			"foo/bar/qux": []string{"ellen"},
+		approvers: map[string]UsernameSet{
+			"foo/bar":     newUsernameSet("bob"),
+			"foo/bar/baz": newUsernameSet("charlie", "dave"),
+			"foo/bar/qux": newUsernameSet("ellen"),
 		},
 	}
 	tests := []struct {
-		got  []string
-		want []string
+		got  UsernameSet
+		want UsernameSet
 	}{
 		{
 			got:  owners.Approvers("foo/bar/baz"),
-			want: []string{"bob", "charlie", "dave"},
+			want: newUsernameSet("bob", "charlie", "dave"),
 		},
 		{
 			got:  owners.Approvers("foo/bar/qux"),
-			want: []string{"bob", "ellen"},
+			want: newUsernameSet("bob", "ellen"),
 		},
 		{
 			got:  owners.Approvers("foo/bar"),
-			want: []string{"bob"},
+			want: newUsernameSet("bob"),
 		},
 	}
 
@@ -50,40 +50,80 @@ func TestApproversWithNoInheritance(t *testing.T) {
 				NoInheritance: true,
 			},
 		},
-		approvers: map[string][]string{
-			"foo/bar":          []string{"alice"},
-			"foo/bar/baz":      []string{"bob"},
-			"foo/bar/qux":      []string{"charlie"},
-			"foo/bar/baz/quux": []string{"dave"},
+		approvers: map[string]UsernameSet{
+			"foo/bar":          newUsernameSet("alice"),
+			"foo/bar/baz":      newUsernameSet("bob"),
+			"foo/bar/qux":      newUsernameSet("charlie"),
+			"foo/bar/baz/quux": newUsernameSet("dave"),
 		},
 	}
 	tests := []struct {
-		got  []string
-		want []string
+		got  UsernameSet
+		want UsernameSet
 	}{
 		{
 			got:  owners.Approvers("foo"),
-			want: []string{},
+			want: newUsernameSet(),
 		},
 		{
 			got:  owners.Approvers("foo/bar"),
-			want: []string{"alice"},
+			want: newUsernameSet("alice"),
 		},
 		{
 			got:  owners.Approvers("foo/bar/baz"),
-			want: []string{"bob"},
+			want: newUsernameSet("bob"),
 		},
 		{
 			got:  owners.Approvers("foo/bar/baz/qux"),
-			want: []string{"bob"},
+			want: newUsernameSet("bob"),
 		},
 		{
 			got:  owners.Approvers("foo/bar/qux"),
-			want: []string{"alice", "charlie"},
+			want: newUsernameSet("alice", "charlie"),
 		},
 		{
 			got:  owners.Approvers("foo/bar/baz/quux"),
-			want: []string{"bob", "dave"},
+			want: newUsernameSet("bob", "dave"),
+		},
+	}
+	for i, tt := range tests {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			if !reflect.DeepEqual(tt.got, tt.want) {
+				t.Errorf("unexpected approvers:\n  got:  %+v\n  want: %+v", tt.got, tt.want)
+				return
+			}
+		})
+	}
+}
+
+func TestApproversWithAliases(t *testing.T) {
+	owners := Owners{
+		approvers: map[string]UsernameSet{
+			"foo/bar":      newUsernameSet("alice", "admins"),
+			"foo/bar/baz":  newUsernameSet("bob", "members"),
+			"foo/qux":      newUsernameSet("alice"),
+			"foo/qux/quux": newUsernameSet("bob", "admins"),
+		},
+		aliases: map[string]UsernameSet{
+			"admins":  newUsernameSet("charlie"),
+			"members": newUsernameSet("dave", "ellen"),
+		},
+	}
+	tests := []struct {
+		got  UsernameSet
+		want UsernameSet
+	}{
+		{
+			got:  owners.Approvers("foo/bar"),
+			want: newUsernameSet("alice", "charlie"),
+		},
+		{
+			got:  owners.Approvers("foo/bar/baz"),
+			want: newUsernameSet("alice", "bob", "charlie", "dave", "ellen"),
+		},
+		{
+			got:  owners.Approvers("foo/qux/quux"),
+			want: newUsernameSet("alice", "bob", "charlie"),
 		},
 	}
 	for i, tt := range tests {
@@ -98,9 +138,9 @@ func TestApproversWithNoInheritance(t *testing.T) {
 
 func TestIsApprover(t *testing.T) {
 	owners := Owners{
-		approvers: map[string][]string{
-			"foo/bar":     []string{"alice"},
-			"foo/bar/baz": []string{"bob"},
+		approvers: map[string]UsernameSet{
+			"foo/bar":     newUsernameSet("alice"),
+			"foo/bar/baz": newUsernameSet("bob"),
 		},
 	}
 	tests := []struct {

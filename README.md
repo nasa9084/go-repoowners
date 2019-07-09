@@ -41,7 +41,7 @@ A typical OWNERS_ALIAS file looks like:
 
 ``` yaml
 ---
-aliases
+aliases:
   admins:
     - alice
     - bob

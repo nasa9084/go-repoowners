@@ -190,18 +190,25 @@ func newUsernameSet(usernames ...string) UsernameSet {
 	return us
 }
 
+// Add given usernames to the set.
+// This function is mutable.
 func (us UsernameSet) Add(usernames ...string) {
 	for _, username := range usernames {
 		us[username] = struct{}{}
 	}
 }
 
+// Delete given usernames from the set.
+// This function is mutable.
 func (us UsernameSet) Delete(usernames ...string) {
 	for _, username := range usernames {
 		delete(us, username)
 	}
 }
 
+// Union get a new set which contains the members of the set
+// and the members of given set.
+// This function is immutable.
 func (us UsernameSet) Union(us2 UsernameSet) UsernameSet {
 	result := UsernameSet{}
 	for k := range us {
@@ -213,11 +220,13 @@ func (us UsernameSet) Union(us2 UsernameSet) UsernameSet {
 	return result
 }
 
+// Has returns true if given username is a member of the set.
 func (us UsernameSet) Has(username string) bool {
 	_, has := us[username]
 	return has
 }
 
+// List returns a sorted list which contains members of set.
 func (us UsernameSet) List() []string {
 	ret := make([]string, 0, len(us))
 	for k := range us {

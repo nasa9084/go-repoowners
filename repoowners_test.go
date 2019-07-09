@@ -43,6 +43,109 @@ func TestApprovers(t *testing.T) {
 	}
 }
 
+func TestApproversWithNoInheritance(t *testing.T) {
+	owners := Owners{
+		options: map[string]options{
+			"foo/bar/baz": options{
+				NoInheritance: true,
+			},
+		},
+		approvers: map[string][]string{
+			"foo/bar":          []string{"alice"},
+			"foo/bar/baz":      []string{"bob"},
+			"foo/bar/qux":      []string{"charlie"},
+			"foo/bar/baz/quux": []string{"dave"},
+		},
+	}
+	tests := []struct {
+		got  []string
+		want []string
+	}{
+		{
+			got:  owners.Approvers("foo"),
+			want: []string{},
+		},
+		{
+			got:  owners.Approvers("foo/bar"),
+			want: []string{"alice"},
+		},
+		{
+			got:  owners.Approvers("foo/bar/baz"),
+			want: []string{"bob"},
+		},
+		{
+			got:  owners.Approvers("foo/bar/baz/qux"),
+			want: []string{"bob"},
+		},
+		{
+			got:  owners.Approvers("foo/bar/qux"),
+			want: []string{"alice", "charlie"},
+		},
+		{
+			got:  owners.Approvers("foo/bar/baz/quux"),
+			want: []string{"bob", "dave"},
+		},
+	}
+	for i, tt := range tests {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			if !reflect.DeepEqual(tt.got, tt.want) {
+				t.Errorf("unexpected approvers:\n  got:  %+v\n  want: %+v", tt.got, tt.want)
+				return
+			}
+		})
+	}
+}
+
+func TestIsApprover(t *testing.T) {
+	owners := Owners{
+		approvers: map[string][]string{
+			"foo/bar":     []string{"alice"},
+			"foo/bar/baz": []string{"bob"},
+		},
+	}
+	tests := []struct {
+		got  bool
+		want bool
+	}{
+		{
+			got:  owners.IsApprover("alice", "foo/bar"),
+			want: true,
+		},
+		{
+			got:  owners.IsApprover("alice", "foo"),
+			want: false,
+		},
+		{
+			got:  owners.IsApprover("alice", "foo/bar/qux"),
+			want: true,
+		},
+		{
+			got:  owners.IsApprover("bob", "foo/bar"),
+			want: false,
+		},
+		{
+			got:  owners.IsApprover("bob", "foo/bar/qux"),
+			want: false,
+		},
+		{
+			got:  owners.IsApprover("bob", "foo/bar/baz"),
+			want: true,
+		},
+		{
+			got:  owners.IsApprover("bob", "foo/bar/baz/qux"),
+			want: true,
+		},
+	}
+	for i, tt := range tests {
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			if tt.got != tt.want {
+				t.Errorf("%t != %t", tt.got, tt.want)
+				return
+			}
+		})
+	}
+}
+
 func TestParseOwners(t *testing.T) {
 	tests := []struct {
 		label string

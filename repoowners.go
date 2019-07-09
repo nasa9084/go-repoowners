@@ -44,14 +44,14 @@ func (m memo) load(path string) []string {
 	return nil
 }
 
-func (o Owners) entries(path string, mp map[string][]string, opts options) []string {
+func (o Owners) entries(path string, mp map[string][]string, opts map[string]options) []string {
 	ret := []string{}
 	for {
 		pp, ok := mp[path]
 		if ok {
 			ret = append(ret, pp...)
 		}
-		if opts.NoInheritance {
+		if opts[path].NoInheritance {
 			break
 		}
 		if path == "" {
@@ -71,7 +71,7 @@ func (o *Owners) Approvers(path string) []string {
 	if approvers := o.memoizedApprovers.load(path); approvers != nil {
 		return approvers
 	}
-	approvers := o.entries(path, o.approvers, o.options[path])
+	approvers := o.entries(path, o.approvers, o.options)
 	o.memoizedApprovers.store(path, approvers)
 	return approvers
 }
@@ -85,7 +85,7 @@ func (o *Owners) Reviewers(path string) []string {
 	if reviewers := o.memoizedReviewers.load(path); reviewers != nil {
 		return reviewers
 	}
-	reviewers := o.entries(path, o.reviewers, o.options[path])
+	reviewers := o.entries(path, o.reviewers, o.options)
 	o.memoizedReviewers.store(path, reviewers)
 	return reviewers
 }
@@ -99,7 +99,7 @@ func (o *Owners) RequiredReviewers(path string) []string {
 	if requiredReviewers := o.memoizedRequiredReviewers.load(path); requiredReviewers != nil {
 		return requiredReviewers
 	}
-	requiredReviewers := o.entries(path, o.requiredReviewers, o.options[path])
+	requiredReviewers := o.entries(path, o.requiredReviewers, o.options)
 	o.memoizedRequiredReviewers.store(path, requiredReviewers)
 	return requiredReviewers
 }

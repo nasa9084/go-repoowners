@@ -233,6 +233,20 @@ reviewers:
 			},
 		},
 		{
+			label: "with comment",
+			in: `---
+# This is comment
+approvers:
+  - alice # foo-team
+reviewers:
+  - bob
+  - charlie # bar-team`,
+			want: ownersConfig{
+				Approvers: []string{"alice"},
+				Reviewers: []string{"bob", "charlie"},
+			},
+		},
+		{
 			label: "empty yaml document",
 			in:    `---`,
 			want:  ownersConfig{},

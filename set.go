@@ -60,6 +60,11 @@ func (us UsernameSet) List() []string {
 	return ret
 }
 
+// Copy returns a new copy of UsernameSet.
+func (us UsernameSet) Copy() UsernameSet {
+	return us.Union(nil)
+}
+
 func (us UsernameSet) String() string {
 	var buf strings.Builder
 	buf.WriteString("{")

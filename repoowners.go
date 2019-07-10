@@ -158,7 +158,7 @@ func (o Owners) entries(path string, mp map[string]UsernameSet, opts map[string]
 }
 
 func (o *Owners) expandAliases(usernames UsernameSet) UsernameSet {
-	usernames = usernames.Union(nil) // make a copy
+	usernames = usernames.Copy()
 	for _, username := range usernames.List() {
 		if expanded, ok := o.aliases[username]; ok {
 			usernames.Delete(username)

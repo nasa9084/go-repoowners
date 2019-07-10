@@ -131,15 +131,6 @@ func (o *Owners) IsRequiredReviewer(user, path string) bool {
 	return requiredReviewers.Has(user)
 }
 
-func isIn(val string, slice []string) bool {
-	for _, target := range slice {
-		if target == val {
-			return true
-		}
-	}
-	return false
-}
-
 type options struct {
 	NoInheritance bool `yaml:"no_inherit,omitempty"`
 }
@@ -153,10 +144,6 @@ type ownersConfig struct {
 
 type aliasesConfig struct {
 	Aliases map[string][]string `yaml:"aliases"`
-}
-
-func (ac aliasesConfig) expand(alias string) []string {
-	return ac.Aliases[alias]
 }
 
 func parseOwners(r io.Reader) (ownersConfig, error) {

@@ -2,12 +2,14 @@ package repoowners
 
 import (
 	"io"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
 
+	"github.com/spf13/afero"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -16,12 +18,15 @@ const (
 	DefaultAliasesFilename = "OWNERS_ALIASES"
 )
 
+var fs = &afero.Afero{Fs: afero.NewOsFs()}
+
 // Owners holds Owners configuration for one repository.
 type Owners struct {
 	// these are path: UsernameSet mapping
 	approvers         map[string]UsernameSet
 	reviewers         map[string]UsernameSet
 	requiredReviewers map[string]UsernameSet
+
 	// path: options mapping
 	options map[string]options
 
@@ -31,6 +36,45 @@ type Owners struct {
 	memoizedApprovers         memo
 	memoizedReviewers         memo
 	memoizedRequiredReviewers memo
+
+	// base is a base path of repository.
+	base string
+}
+
+func newOwners() Owners {
+	return Owners{
+		approvers:         map[string]UsernameSet{},
+		reviewers:         map[string]UsernameSet{},
+		requiredReviewers: map[string]UsernameSet{},
+		options:           map[string]options{},
+		aliases:           map[string]UsernameSet{},
+	}
+}
+
+func LoadLocal(basePath string) (Owners, error) {
+	o := newOwners()
+	o.base = basePath
+
+	if _, err := fs.Stat(filepath.Join(basePath, DefaultAliasesFilename)); err == nil {
+		f, err := fs.Open(filepath.Join(basePath, DefaultAliasesFilename))
+		if err != nil {
+			return Owners{}, err
+		}
+		defer f.Close()
+
+		ac, err := parseAliases(f)
+		if err != nil {
+			return Owners{}, err
+		}
+		for alias, list := range ac.Aliases {
+			o.aliases[alias] = newUsernameSet(list...)
+		}
+	}
+	if err := fs.Walk(o.base, o.walkFunc); err != nil {
+		return Owners{}, err
+	}
+
+	return o, nil
 }
 
 type memo struct {
@@ -47,6 +91,49 @@ func (m memo) load(path string) UsernameSet {
 		return val.(UsernameSet)
 	}
 	return nil
+}
+
+func (o *Owners) walkFunc(path string, info os.FileInfo, err error) error {
+	if err != nil {
+		return nil
+	}
+	fn := filepath.Base(path)
+	relPath, err := filepath.Rel(o.base, path)
+	if err != nil {
+		return err
+	}
+	relPathDir := filepath.Dir(relPath)
+	if info.Mode().IsDir() || !info.Mode().IsRegular() {
+		return nil
+	}
+	if fn != DefaultOwnersFilename {
+		return nil
+	}
+
+	f, err := fs.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	oc, err := parseOwners(f)
+	if err != nil {
+		return err
+	}
+	o.applyOwnersConfig(relPathDir, oc)
+	return nil
+}
+
+func (o *Owners) applyOwnersConfig(path string, oc ownersConfig) {
+	if len(oc.Approvers) > 0 {
+		o.approvers[path] = newUsernameSet(oc.Approvers...)
+	}
+	if len(oc.Reviewers) > 0 {
+		o.reviewers[path] = newUsernameSet(oc.Reviewers...)
+	}
+	if len(oc.RequiredReviewers) > 0 {
+		o.requiredReviewers[path] = newUsernameSet(oc.RequiredReviewers...)
+	}
+	o.options[path] = oc.Options
 }
 
 func (o Owners) entries(path string, mp map[string]UsernameSet, opts map[string]options) UsernameSet {

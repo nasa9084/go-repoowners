@@ -2,10 +2,99 @@ package repoowners
 
 import (
 	"bytes"
+	"fmt"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"testing"
+
+	"github.com/spf13/afero"
 )
+
+func newMemFS() *afero.Afero {
+	return &afero.Afero{Fs: afero.NewMemMapFs()}
+}
+
+func TestLoadLocalOnlyOneOwners(t *testing.T) {
+	const basePath = "src/github.com/nasa9084/test_repository"
+	fs = newMemFS()
+	if err := fs.MkdirAll(basePath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	f, err := fs.OpenFile(filepath.Join(basePath, DefaultOwnersFilename), os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Fprint(f, `---
+approvers:
+- alice
+- bob
+reviewers:
+- charlie
+- dave
+- ellen`)
+
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	o, err := LoadLocal(basePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantApprovers := map[string]UsernameSet{
+		".": newUsernameSet("alice", "bob"),
+	}
+	wantReviewers := map[string]UsernameSet{
+		".": newUsernameSet("charlie", "dave", "ellen"),
+	}
+	if !reflect.DeepEqual(o.approvers, wantApprovers) {
+		t.Errorf("unexpected approvers:\n  got:  %+v\n  want: %+v", o.approvers, wantApprovers)
+		return
+	}
+	if !reflect.DeepEqual(o.reviewers, wantReviewers) {
+		t.Errorf("unexpected reviewers:\n  got:  %+v\n  want: %+v", o.reviewers, wantReviewers)
+		return
+	}
+}
+
+func TestLoadLocalOnlyAliases(t *testing.T) {
+	const basePath = "src/github.com/nasa9084/test_repository"
+	fs = newMemFS()
+	if err := fs.MkdirAll(basePath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	f, err := fs.OpenFile(filepath.Join(basePath, DefaultAliasesFilename), os.O_CREATE|os.O_RDWR, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Fprint(f, `---
+aliases:
+  managers:
+    - alice
+  members:
+    - bob
+    - charlie
+    - dave`)
+
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	o, err := LoadLocal(basePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantAliases := map[string]UsernameSet{
+		"managers": newUsernameSet("alice"),
+		"members":  newUsernameSet("bob", "charlie", "dave"),
+	}
+	if !reflect.DeepEqual(o.aliases, wantAliases) {
+		t.Errorf("unexpected aliases:\n  got:  %+v\n  want: %+v", o.aliases, wantAliases)
+		return
+	}
+}
 
 func TestApprovers(t *testing.T) {
 	owners := Owners{

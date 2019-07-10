@@ -3,7 +3,6 @@ package repoowners
 import (
 	"bytes"
 	"fmt"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strconv"
@@ -22,7 +21,7 @@ func TestLoadLocalOnlyOneOwners(t *testing.T) {
 	if err := fs.MkdirAll(basePath, 0755); err != nil {
 		t.Fatal(err)
 	}
-	f, err := fs.OpenFile(filepath.Join(basePath, DefaultOwnersFilename), os.O_CREATE|os.O_RDWR, 0644)
+	f, err := fs.Create(filepath.Join(basePath, DefaultOwnersFilename))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +64,7 @@ func TestLoadLocalOnlyAliases(t *testing.T) {
 	if err := fs.MkdirAll(basePath, 0755); err != nil {
 		t.Fatal(err)
 	}
-	f, err := fs.OpenFile(filepath.Join(basePath, DefaultAliasesFilename), os.O_CREATE|os.O_RDWR, 0644)
+	f, err := fs.Create(filepath.Join(basePath, DefaultAliasesFilename))
 	if err != nil {
 		t.Fatal(err)
 	}

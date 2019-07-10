@@ -1,12 +1,14 @@
 package repoowners
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
+	"github.com/nasa9084/go-repoowners/internal/pkg/git"
 	"github.com/spf13/afero"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -17,6 +19,15 @@ const (
 )
 
 var fs = &afero.Afero{Fs: afero.NewOsFs()}
+var gc *git.Client
+
+func init() {
+	c, err := git.NewClient()
+	if err != nil {
+		panic(err)
+	}
+	gc = c
+}
 
 // Owners holds Owners configuration for one repository.
 type Owners struct {
@@ -47,6 +58,14 @@ func newOwners() Owners {
 		options:           map[string]options{},
 		aliases:           map[string]UsernameSet{},
 	}
+}
+
+func LoadRemote(domain, org, repo, branch string) (Owners, error) {
+	r, err := gc.Clone(fmt.Sprintf("%s/%s/%s:%s", domain, org, repo, branch))
+	if err != nil {
+		return Owners{}, err
+	}
+	return LoadLocal(r.Dir)
 }
 
 func LoadLocal(basePath string) (Owners, error) {

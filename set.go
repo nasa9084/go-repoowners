@@ -65,6 +65,18 @@ func (us UsernameSet) Copy() UsernameSet {
 	return us.Union(nil)
 }
 
+// Pop returns a username from the set and remove it.
+// Return true if the returned value at first return,
+// is a member of the set, otherwise false as second
+// return value..
+func (us UsernameSet) Pop() (string, bool) {
+	for key := range us {
+		us.Delete(key)
+		return key, true
+	}
+	return "", false
+}
+
 func (us UsernameSet) String() string {
 	var buf strings.Builder
 	buf.WriteString("{")
